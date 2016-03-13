@@ -1,0 +1,386 @@
+#!/usr/bin/perl
+use warnings;
+use strict;
+use 5.010;
+
+=head1 NAME
+
+Hammurabi
+
+=head1 VERSION
+
+1.0
+
+=cut
+
+our $VERSION = '1.0';
+
+=head1 SYNOPSIS
+
+ ./hamurabi
+
+=head1 DESCRIPTION
+
+In this game you direct the administrator of Sumeria, Hamurabi, how to manage
+the city. The city initially has 1000 acres, 100 people, and 3000 bushels of
+grain in storage.
+
+You may buy and sell land with your neighboring city-states for bushels of
+grain - the price will vary between 17 and 26 bushels per acre.  You must also
+ use grain to feed your people and as seed to plant the next year's crop.
+
+You will quickly find that a certain number of people can only tend a certain
+amount of land and that people starve if they are not fed enough. You also
+have the unexpected to contend with such as a plague, rats destroying stored
+grain, and variable harvests.
+
+Your kingdom must survive for ten years to win.
+
+=cut
+
+sub main {
+    my $bushels        = 2800;                  # bushels in store.
+    my $population     = 95;                    # population.
+    my $births         = 5;                     # people coming to the city.
+    my $deaths         = 0;                     # people dying.
+    my $total_deaths   = 0;                     # total deaths.
+    my $percent_deaths = 0;                     # percent deaths.
+    my $harvest        = 3000;                  # amount harvested.
+    my $yield          = 3;                     # Bushels per acre.
+    my $acres          = $harvest / $yield;     # Acres owned.
+    my $eaten          = $harvest - $bushels;   # Eaten by rats.
+
+    intro();
+    for ( my $year = 1 ; $year < 11 ; $year++ ) {
+        $population += $births;
+        my $plague = is_plague();
+        if ($plague) {
+            $population -= int( $population / 2 );
+        }
+
+        report(
+            $acres,  $bushels,    $births, $deaths, $eaten,
+            $plague, $population, $year,   $yield
+        );
+
+        my $price = ( int rand 10 ) + 17;
+        my $bought_acres = buy_acres( $bushels, $price );
+        if ( $bought_acres == 0 ) {
+            my $sold_acres = sell_acres( $acres, $bushels, $price );
+            $acres -= $sold_acres;
+            $bushels += ( $price * $sold_acres );
+        }
+        else {
+            $acres += $bought_acres;
+            $bushels -= ( $price * $bought_acres );
+        }
+
+        my $feed = feed_population($bushels);
+        $bushels -= $feed;
+
+        my $planted_acres = plant_crops( $acres, $bushels, $population );
+        $bushels -= int( $planted_acres / 2 );    # Required for seeds to plant.
+        $eaten = eaten_by_rats($bushels);
+
+        # A bountyful harvest!!
+        $yield   = roll_dice();
+        $harvest = $planted_acres * $yield;
+        $bushels += $harvest - $eaten;
+
+        $births = births( $acres, $bushels, $population );
+        $deaths = deaths( $feed, $population );
+        $percent_deaths = ( ( $year - 1 ) * $percent_deaths + $deaths * 100 / $population ) / $year;
+        $population -= $deaths;
+        $total_deaths += $deaths;
+
+        # Starve enough for impeachment?
+        if ( $deaths > 0.45 * $population ) {
+            say "\nYou starved $deaths people in one year!!!";
+            impeach();
+        }
+    }
+    return results( $acres, $population, $percent_deaths, $total_deaths );
+}
+
+sub intro {
+    say q{ } x 32, 'Hamurabi';
+    say q{ } x 15, 'Creative Computing  Morristown, New Jersey';
+    say "\n\n";
+    say 'Try your hand at governing ancient Sumeria';
+    say "for a ten-year term of office.\n";
+
+    return;
+}
+
+sub report {
+    my (
+        $acres,  $bushels,    $births, $deaths, $eaten,
+        $plague, $population, $year,   $yield
+    ) = @_;
+
+    say "\n\nHamurabi:  I beg to report to you,";
+    say "In year $year, $deaths people starved, $births came to the city,";
+    if ($plague) {
+        say 'a horrible plague struck!  Half the people died.';
+    }
+    say "population is now $population";
+    say "The city now owns $acres acres.";
+    say "You harvested $yield bushels per acre.";
+    say "Rats ate $eaten bushels.";
+    say "You have $bushels bushels in store.\n";
+
+    return;
+}
+
+sub buy_acres {
+    my ( $bushels, $price ) = @_;
+    say "Land is trading at $price bushels per acre.";
+
+    my $bought_acres;
+    while (1) {
+        say 'How many acres do you wish to buy?';
+        $bought_acres = <>;
+        if ( $bought_acres < 0 ) {
+            resign();
+        }
+
+        if ( $price * $bought_acres <= $bushels ) {
+            last;
+        }
+        else {
+            insufficient_bushels($bushels);
+        }
+    }
+
+    return $bought_acres;
+}
+
+sub sell_acres {
+    my ( $acres, $bushels, $price ) = @_;
+
+    my $sold_acres;
+    while (1) {
+        say 'How many acres do you wish to sell?';
+        $sold_acres = <>;
+        if ( $sold_acres < 0 ) {
+            resign();
+        }
+
+        if ( $sold_acres < $acres ) {
+            last;
+        }
+        else {
+            insufficient_acres($acres);
+        }
+    }
+
+    return $sold_acres;
+}
+
+sub feed_population {
+    my ($bushels) = @_;
+
+    my $feed;
+    say q{};
+    while (1) {
+        say 'How many bushels do you wish to feed your people?';
+        $feed = <>;
+        if ( $feed < 0 ) {
+            resign();
+        }
+
+        if ( $feed < $bushels ) {
+            last;
+        }
+        else {
+
+            # Trying to use more grain than in the silos?
+            insufficient_bushels($bushels);
+        }
+    }
+
+    return $feed;
+}
+
+sub plant_crops {
+    my ( $acres, $bushels, $population ) = @_;
+    say q{};
+
+    my $planted_acres;
+    while (1) {
+        say 'How many Acres do you wish to plant with seed?';
+        $planted_acres = <>;
+
+        if ( $planted_acres == 0 ) {
+            return;
+        }
+        if ( $planted_acres < 0 ) {
+            resign();
+        }
+
+        if ( $planted_acres <= $acres ) {
+
+            # Enough grain for seed?
+            if ( int( $planted_acres / 2 ) <= $bushels ) {
+
+                # Enough people to tend the crops?
+                if ( $planted_acres <= ( 10 * $population ) ) {
+                    last;
+                }
+                else {
+                    say
+"But you have only $population people to tend the fields.  Now then,";
+                }
+
+            }
+            else {
+                insufficient_bushels($bushels);
+            }
+        }
+        else {
+
+            # Trying to plant more acres than you own?
+            insufficient_acres($acres);
+        }
+    }
+
+    return $planted_acres;
+}
+
+sub eaten_by_rats {
+    my ($bushels) = @_;
+
+    my $eaten = 0;
+    my $c     = roll_dice();
+    if ( int( $c / 2 ) == $c / 2 ) {  # if c is even
+
+        # The rats are running wild!!
+        $eaten = int( $bushels / $c );
+    }
+
+    return $eaten;
+}
+
+sub births {
+    my ( $acres, $bushels, $population ) = @_;
+
+    # Let's have some babies.
+    return
+      int( roll_dice() * ( 20 * $acres + $bushels ) / $population / 100 + 1 );
+}
+
+sub deaths {
+    my ( $feed, $population ) = @_;
+
+    # How many people had full tummies?
+    my $deaths = $population - int( $feed / 20 );
+
+    if ( $deaths < 0) {
+        $deaths = 0;
+    }
+
+    if ( $population < $deaths ) {
+        $deaths = $population;
+    }
+
+    return $deaths;
+}
+
+sub is_plague {
+
+    # Horrors, a 15% chance of plague.
+    return int rand 100 < 15 ? 1 : 0;
+}
+
+sub impeach {
+    say 'Due to this extreme mismanagement you have not only';
+    say 'been impeached and thrown out of office but you have';
+    say 'also been declared national fink!!!!';
+
+    return end();
+}
+
+sub insufficient_bushels {
+    my ($bushels) = @_;
+
+    say 'Hamurabi:  Think again.  You have only';
+    say "$bushels bushels of grain.  Now then,";
+
+    return;
+}
+
+sub insufficient_acres {
+    my ($acres) = @_;
+
+    say "Hamurabi:  Think again.  You own only $acres acres.  Now then,";
+
+    return;
+}
+
+sub roll_dice {
+    return ( int rand 5 ) + 1;
+}
+
+sub resign {
+    say "\nHamurabi:  I cannot do what you wish.";
+    say 'Get yourself another steward!!!!!';
+    return end();
+}
+
+sub results {
+    my ( $acres, $population, $percent_deaths, $total_deaths ) = @_;
+
+    say "In your 10-year term of office, $percent_deaths percent of the";
+    say 'population starved per year on the average, i.e. a total of';
+    say "$total_deaths people died!!";
+    my $l = int( $acres / $population );
+    say 'You started with 10 acres per person and ended with';
+    say "$l acres per person.\n";
+
+    if ( $percent_deaths > 33 || $l < 7 ) {
+        impeach();
+    }
+    elsif ( $percent_deaths > 10 || $l < 9 ) {
+        say 'Your heavy-handed performance smacks of Nero and Ivan IV.';
+        say 'The people (remaining) find you an unpleasant ruler, and,';
+        say 'frankly, hate your guts!!';
+    }
+    elsif ( $percent_deaths > 3 || $l < 10 ) {
+        say 'Your performance could have been somewhat better, but';
+        say q{Really wasn't too bad at all.  }, int rand( $population * 0.8 ),
+          ' people';
+        say 'dearly like to see you assassinated but we all have our';
+        say 'trivial problems.';
+    }
+    else {
+        say 'A fantastic performance!!!  Charlemagne, Disraeli, and';
+        say 'Jefferson combined could not have done better!';
+    }
+
+    return end();
+}
+
+sub end {
+    say "\n\t\t\t\t\t\t\tSo long for now.\n";
+    exit 0;
+}
+
+main();
+
+=head1 BUGS
+
+There are two m's in Hammurabi.
+
+=head1 AUTHOR
+
+Jaldhar H. Vyas, C<< <jaldhar at braincells.com> >>
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright (C) 2016, Consolidated Braincells Inc.  All rights reserved.
+
+"Do What Thou Wilt" shall be the whole of the license.
+
+=cut
+
+
