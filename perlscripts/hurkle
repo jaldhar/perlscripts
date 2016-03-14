@@ -1,0 +1,82 @@
+#!/usr/bin/perl
+use warnings;
+use strict;
+
+=head1 NAME
+
+Hurkle
+
+=head1 VERSION
+
+1.0
+
+=cut
+
+our $VERSION = '1.0';
+
+=head1 SYNOPSIS
+
+ ./hurkle
+
+=head1 DESCRIPTION
+
+Hurkle? A hurkle is a happy beast and lives in another galaxy on a planet
+named Lirht that has three moons. Hurkle are favorite pets of the Gwik, the
+dominant race of Lirht and...well, to find out more reas "The Hurkle is a 
+Happy Beast" a story in a book called "A Way Home" by Theodore Sturgeon.
+
+In this program a shy hurkle is hiding out on a 10 by 10 grid.  Homebase is
+point 0,0 in the southwest corner.  Your guess as to the gridpoint where the
+hurkle is hiding should be a pair of whole numbers, seperated by a comma.
+After each try, the computer will tell you the approximate direction to go
+look for the hurkle.  You get five guesses to find him.
+
+=cut
+
+my $n = 5;
+
+print<<"-EOT-";
+
+A Hurkle is hiding on a 10 by 10 grid.  Homebase on the grid is point 0,0 and 
+any gridpoint is a pair of whole numbers seperated by a comma.  Try to guess 
+the Hurkle's gridpoint.  You get $n tries.  After each try, I will tell you 
+the approximate direction to go to look for the Hurkle.
+
+-EOT-
+
+my $a = int(rand(10));
+my $b = int(rand(10));
+
+for (my $k = 0; $k < $n; $k++)
+{
+  print 'Guess #', $k + 1, '  ';
+  <STDIN> =~ /(\d)\s*,\s*(\d)/;
+  my ($x, $y) = ($1, $2);
+  print "Huh?\n" && next unless ($x =~ /[0-9]/ && $y =~ /[0-9]/);
+    
+  if (abs($x - $a) + abs($y - $b) == 0)
+  {
+    print "\nYou found him in $k guesses!\n";
+    exit 0;
+  }
+  print 'Go ', ($y < $b) ? 'North' : ($y > $b) ? 'South' : '',
+    ($x < $a) ? 'East'  : ($x > $a) ? 'West'  : '', "\n\n";
+}
+print "\nSorry that's $n guesses.  The Hurkle is at $a,$b\n";
+
+=head1 BUGS
+
+None so far.
+
+=head1 AUTHOR
+
+Jaldhar H. Vyas, C<< <jaldhar at braincells.com> >>
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright (C) 2016, Consolidated Braincells Inc.  All rights reserved.
+
+"Do What Thou Wilt" shall be the whole of the license.
+
+=cut
+
