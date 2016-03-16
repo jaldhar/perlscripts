@@ -1,0 +1,519 @@
+#!/usr/bin/perl
+use 5.010;
+use strict;
+use warnings;
+
+=head1 NAME
+
+Wumpus - Hunt the wumpus!
+
+=head1 VERSION
+
+1.0
+
+=cut
+
+our $VERSION = '1.0';
+
+=head1 SYNOPSIS
+
+ ./wumpus
+
+=head1 DESCRIPTION
+
+The Wumpus lives in a cave of 20 rooms. Each room has 3 tunnels leading to
+other rooms forming a dodecahedron like this:
+
+                     /\
+                    /  \
+                   /    \
+                  /  7   \
+                 / / | \  \
+                1-6  |  8--2
+               / /   16  \  \
+              / /   /  \  \  \
+             /15--20    17-9  \
+            / |   |      | |   \
+           /  14--19----18-10   /
+           \ /|  /        \| \ /
+            5 13-----12---11  3
+             \       |       /
+              \------4------/
+
+Several of the rooms contain hazards:
+
+=over 4
+
+=item Bottomless Pits
+
+2 rooms have bottomless pits in them. If you go there, you fall into the pit
+(and lose!)
+    
+=item Superbats
+
+2 other rooms have Superbats.  If you go there, a bat grabs you and takes you
+to some other room at random. (Which could be troublesome.)
+
+=item Wumpus
+
+The Wumpus is not bothered by the hazards.  (He has sucker feet and is too big
+for the bats to lift.)  Usually he is asleep.  2 things that wake him up:
+your entering his room or your shooting an arrow.  If the Wumpus wakes up, he
+moves (75%) one room, or stays still.  (25%) After that, if he is where you
+are, he eats you up (and you lose!)
+
+=back
+
+You start the game in a random room.  Each turn you may move, shoot a crooked
+arrow, get help, or quit.
+
+=over 4
+
+=item Moving
+
+You can go one room (through one tunnel.)
+
+=item Shooting
+
+You have 5 arrows. You lose when you run out.  Each arrow can go from 1 to 5
+rooms.  You aim by telling the computer the room number you want the arrow to
+go to. If the arrow can't go that way (i.e. no tunnel) it moves at random to
+the next tunnel.  If the arrow hits the Wumpus, you win. If the arrow hits
+you, you lose.
+
+=back
+
+When you are one room away from the Wumpus or a hazard, the computer says:
+
+=over 4
+
+=item  Wumpus: 'I smell a Wumpus'
+
+=item Bat: 'Bats nearby'
+
+=item Pit: 'I feel a draft'
+
+=back
+
+=cut
+
+my $wumpus = Wumpus->new;
+$wumpus->setup;
+
+{
+
+    # $wumpus->debug;
+    my $lost = run();
+    if ($lost) {
+        say 'Ha ha ha - you lose!';
+    }
+    else {
+        say q{Hee hee hee - the Wumpus'll getcha next time!!};
+    }
+
+    {
+        print '(N)ew game (R)eplay this map (Q)uit ?  ';
+        my $input = getline();
+        COMMAND: for ($input) {
+            if (/\A[Nn]/msx) {
+                $wumpus = Wumpus->new;
+                $wumpus->setup;
+                last COMMAND;
+            }
+            if (/\A[Rr]/msx) {
+                $wumpus->setup;
+                last COMMAND;
+            }
+            if (/\A[Qq]/msx) {
+                exit 0;
+            }
+            say 'Invalid command';
+            redo;
+        }
+    }
+    redo;
+}
+
+sub are_we_dead_yet {
+    my ($wumpus) = @_;
+
+    my ( $found_wumpus, $found_object ) =
+      $wumpus->whats_at( $wumpus->player_pos );
+
+    if ( $found_object eq 'superbats' ) {
+        say 'ZAP--Super bat snatch!  Elsewhereville for you!';
+        $wumpus->move_player_randomly;
+    }
+    elsif ( $found_object eq 'trap' ) {
+        say 'YYYIIIIEEEE! ... You fell in a pit!';
+        return 1;
+    }
+
+    if ($found_wumpus) {
+        if ( rand 1 < 0.75 ) {
+            say '...Oops! bumped a Wumpus!';
+            $wumpus->move_wumpus_randomly;
+        }
+        else {
+            say 'Tsk tsk tsk! - The Wumpus got you!';
+            return 1;
+        }
+    }
+    return 0;
+}
+
+sub getline {
+    my $input = <>;
+    chomp $input;
+    $input =~ s{\A\s+}{}msx;
+
+    return $input;
+}
+
+sub instructions {
+    say <<'EOT';
+
+Welcome to Hunt The Wumpus
+
+The Wumpus lives in a cave of 20 rooms.  Each room has 3 tunnels leading to 
+other rooms.  (Look at a dodecahedron to see how this works--if you don't
+know what a dodecahedron is, ask someone.)
+
+Hazards -
+    Bottomless Pits - 2 rooms have bottomless pits in them.  If you go there,
+                      you fall into the pit (& lose!)
+    Superbats       - 2 other rooms have Superbats.  If you go there, a bat
+                      grabs you and takes you to some other room at random.
+                      (Which could be troublesome.)
+
+Wumpus -
+The Wumpus is not bothered by the hazards.  (He has sucker feet and is too big
+for the bats to lift.)  Usually he is asleep.  2 things that wake him up:
+your entering his room or your shooting an arrow.  If the Wumpus wakes up, he
+moves (75%) one room, or stays still.  (25%) After that, if he is where you
+are, he eats you up (& you lose!)
+
+You -
+Each turn you may move, shoot a crooked arrow, get help, or quit.
+    Moving - You can go one room (through one tunnel.)
+    Arrows - You have 5 arrows.  You lose when you run out.  Each arrow can
+             go from 1 to 5 rooms.  You aim by telling the computer the room 
+             number you want the arrow to go to.  If the arrow can't go that
+             way (i.e. no tunnel) it moves at random to the next tunnel.  If
+             the arrow hits the Wumpus, you win.  If the arrow hits you, you 
+             lose.
+
+Warnings -
+When you are one room away from the Wumpus or a hazard, the computer says:
+    Wumpus - 'I smell a Wumpus'
+    Bat    - 'Bats nearby'
+    Pit    - 'I feel a draft'
+
+EOT
+
+    return;
+}
+
+sub prompt {
+    my ( $prompt, $min, $max ) = @_;
+
+    my $input;
+    {
+        print $prompt;
+        $input = getline();
+        redo if $input !~ m{\d+}msx || $input < $min || $input > $max;
+    }
+
+    return $input;
+}
+
+sub run {
+    {
+
+        if ( are_we_dead_yet($wumpus) ) {
+            return 1;
+        }
+
+        status($wumpus);
+
+        print '(M)ove (S)hoot (H)elp (Q)uit ?  ';
+        COMMAND: for ( getline() ) {
+            if (/\A[Mm]/msx) {
+                my $to = prompt( 'Where to (1-20)?  ', 1, 20 );
+                if ( $wumpus->move_player($to) ) {
+                    say 'Not possible';
+                }
+                last COMMAND;
+            }
+            if (/\A[Ss]/msx) {
+                my $rooms = prompt( 'How many rooms (1-5)?  ', 1, 5 );
+                my @arrowpath;
+                for my $room ( 1 .. $rooms ) {
+                    my $roomno = prompt( "room $room = ", 1, 20 );
+                    push @arrowpath, $roomno;
+                }
+                my $result = $wumpus->shoot(@arrowpath);
+                if ($result == 1) {
+                    say 'Aha! You got the wumpus!';
+                    return 0;
+                }
+                elsif ($result == 2) {
+                    say 'Ouch! Arrow got you!';
+                    return 1;
+                }
+                elsif ($result == 3) {
+                    say 'You ran out of arrows!';
+                    return 1;
+                }
+                else {
+                    say 'Missed';
+                    $wumpus->move_wumpus_randomly;
+                }
+                last COMMAND;
+            }
+            if (/\A[Hh]/msx) {
+                instructions();
+                last COMMAND;
+            }
+            if (/\A[Qq]/msx) {
+                return 0;
+            }
+            say "Invalid command: $_.";
+        }
+        redo;
+    }
+
+    return 0;
+}
+
+sub status {
+    my ($wumpus) = @_;
+
+    my @adjacent = $wumpus->adjacent( $wumpus->player_pos );
+    foreach my $room (@adjacent) {
+        my ( $found_wumpus, $found_object ) = $wumpus->whats_at($room);
+        if ($found_wumpus) {
+            say 'I smell a Wumpus!';
+        }
+
+        next if ( !$found_object );
+
+        if ( $found_object eq 'superbats' ) {
+            say 'Bats nearby!';
+        }
+        elsif ( $found_object eq 'trap' ) {
+            say 'I feel a draft!';
+        }
+    }
+
+    say 'You are in room  ', $wumpus->player_pos;
+    say 'Tunnels lead to  ', join q{  }, @adjacent;
+
+    return;
+}
+
+package Wumpus;
+use strict;
+use warnings;
+
+our $VERSION = '1.0';
+
+sub new {
+    my ($proto) = @_;
+
+    my $class = ref($proto) || $proto;
+
+    my $self = {
+        player => 0,
+        wumpus => 0,
+        arrows => 0,
+    };
+
+    my @adjacency = (
+        [ 2,  5,  6 ],
+        [ 1,  3,  8 ],
+        [ 2,  4,  10 ],
+        [ 3,  5,  12 ],
+        [ 1,  4,  14 ],
+        [ 1,  7,  15 ],
+        [ 6,  8,  16 ],
+        [ 2,  7,  9 ],
+        [ 8,  10, 17 ],
+        [ 3,  9,  11 ],
+        [ 10, 12, 18 ],
+        [ 4,  11, 13 ],
+        [ 12, 14, 19 ],
+        [ 5,  13, 15 ],
+        [ 6,  14, 20 ],
+        [ 7,  17, 20 ],
+        [ 9,  16, 18 ],
+        [ 10, 11, 17 ],
+        [ 13, 14, 20 ],
+        [ 15, 16, 19 ],
+    );
+
+    for my $i ( 1 .. 20 ) {
+        $self->{grid}->{$i} = {
+            adjacent => $adjacency[ $i - 1 ],
+            object   => q{},
+        };
+    }
+    bless $self, $class;
+
+    my @objects = (qw/ trap trap superbats superbats /);
+    foreach my $object (@objects) {
+        $self->{grid}->{ $self->empty_room }->{object} = $object;
+    }
+
+    return $self;
+}
+
+sub adjacent {
+    my ( $self, $pos ) = @_;
+
+    my @results = sort { $a <=> $b } @{ $self->{grid}->{$pos}->{adjacent} };
+    return @results;
+}
+
+sub debug {
+    my ($self) = @_;
+
+    foreach ( 1 .. 20 ) {
+        say
+          sprintf( '%2d ', $_ ),
+          $self->{grid}->{$_}->{object} || 'empty',
+          $_ == $self->{player} ? ' [player] ' : q{},
+          $_ == $self->{wumpus} ? ' [wumpus] ' : q{};
+    }
+
+    return;
+}
+
+sub empty_room {
+    my ($self) = @_;
+
+    my $rand;
+    {
+        $rand = ( int rand 20 ) + 1;
+        if ( $self->{grid}->{$rand}->{object} || $self->{player} == $rand ) {
+            redo;
+        }
+    }
+    return $rand;
+}
+
+sub make_grid {
+    my ($self) = @_;
+
+    return;
+}
+
+sub move_player {
+    my ( $self, $input ) = @_;
+
+    foreach ( $self->adjacent( $self->{player} ) ) {
+        if ( $_ == $input ) {
+            $self->{player} = $input;
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+sub move_player_randomly {
+    my ($self) = @_;
+
+    $self->{player} = ( int rand 20 ) + 1;
+
+    return;
+}
+
+sub move_wumpus_randomly {
+    my ($self) = @_;
+
+    {
+        $self->{wumpus} = ( int rand 20 ) + 1;
+        if ( $self->{wumpus} == $self->{player} ) {
+            redo;
+        }
+
+    }
+
+    return;
+}
+
+sub player_pos {
+    my ($self) = @_;
+
+    return $self->{player};
+}
+
+sub setup {
+    my ($self) = @_;
+
+    $self->{player} = $self->empty_room;
+    $self->move_wumpus_randomly;
+    $self->{arrows} = 5;
+
+    return;
+}
+
+sub shoot {
+    my ( $self, @arrowpath ) = @_;
+
+    my $current = $self->{player};
+    foreach my $room (@arrowpath) {
+        my @adjacent = $self->adjacent($current);
+
+        if ( grep { $_ == $room } @adjacent ) {
+            $current = $room;
+        }
+        else {
+            $current = $adjacent[ ( int rand 3 ) ];
+        }
+
+        if ( $current == $self->{wumpus} ) {
+            return 1;
+        }
+        elsif ( $current == $self->{player} ) {
+            return 2;
+        }
+    }
+
+    $self->{arrows}--;
+    if ( $self->{arrows} < 1 ) {
+        return 3;
+    }
+
+    return 0;
+}
+
+sub whats_at {
+    my ( $self, $pos ) = @_;
+
+    my $wumpus = ( $self->{wumpus} == $pos ) ? 1 : undef;
+    my $object = $self->{grid}->{$pos}->{object};
+
+    return ( $wumpus, $object );
+}
+
+1;
+
+__END__
+
+=head1 BUGS
+
+None so far.
+
+=head1 AUTHOR
+
+Jaldhar H. Vyas, C<< <jaldhar at braincells.com> >>
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright (C) 2016, Consolidated Braincells Inc.  All rights reserved.
+
+"Do What Thou Wilt" shall be the whole of the license.
+
+=cut
