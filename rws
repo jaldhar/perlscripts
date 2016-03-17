@@ -1,0 +1,76 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use Curses;
+use Time::HiRes qw/ sleep /;
+ 
+$SIG{'INT'} = sub {endwin; exit(0);}; 
+
+initscr;
+cbreak;
+noecho;
+clear;
+
+for (my $i = 0;;$i++)
+{
+  if ($i % 2)
+  {
+    addstr(0, $i % 80, '%-');
+  }
+  else
+  {
+    addstr(0, $i % 80, '%<');
+  }
+  sleep 0.25; # sleep for 1/4 second
+  addstr(0, ($i - 2) % 80, '  ');
+  move(1, 0);
+  refresh;
+}
+ 
+__END__
+ 
+=pod
+ 
+=head1 NAME
+ 
+rws -- Running With Scissors
+ 
+=head1 VERSION
+ 
+1.1
+
+=cut
+
+our $VERSION = '1.1';
+
+=head1 SYNOPSIS
+ 
+B<rws>
+ 
+=head1 DESCRIPTION
+ 
+Trolls for a response from Randal Schwartz.  Press the interrupt key (usually 
+Ctrl-C) to quit. 
+ 
+=head1 INSTALLATION
+ 
+You may have to change the first line if B<Perl> is not in F</usr/bin> on
+your system.  It uses the L<Time::HiRes|Time::HiRes> module which is standard in Perl 5.8
+and later.  You will also need the L<Curses|Curses> module from CPAN.  Other than
+that, just make the script executable and you are ready to go.
+ 
+=head1 BUGS
+ 
+Assumes terminal line length is 80 -- itself an example of running with
+scissors!
+ 
+=head1 AUTHOR
+
+Jaldhar H. Vyas, C<< <jaldhar at braincells.com> >>
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright (C) 2016, Consolidated Braincells Inc.  All rights reserved.
+
+"Do What Thou Wilt" shall be the whole of the license.
+
